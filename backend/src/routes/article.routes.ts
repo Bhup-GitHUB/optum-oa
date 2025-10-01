@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Article, User, Tag, Category } from '../models';
 import { auth } from '../middlewares/auth';
+import { Op } from 'sequelize';
 
 const router = Router();
 
@@ -241,6 +242,111 @@ router.post('/:slug/viewed', async (req: Request, res: Response) => {
     res.json({ 
       message: 'View counted',
       viewCount: article.viewCount 
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/:slug/recommendations', async (req: Request, res: Response) => {
+  try {
+    const currentArticle = await Article.findOne({
+      where: { slug: req.params.slug },
+      include: [
+        {
+          model: Tag,
+          as: 'tags',
+          attributes: ['id', 'name'],
+          through: { attributes: [] }
+        },
+        {
+          model: Category,
+          as: 'category',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+    
+    if (!currentArticle) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    
+    const currentTags = (currentArticle as any).tags || [];
+    const currentTagIds = currentTags.map((tag: any) => tag.id);
+    const currentCategoryId = currentArticle.categoryId;
+    
+    let recommendedArticles = await Article.findAll({
+      where: {
+        id: { [Op.ne]: currentArticle.id }
+      },
+      include: [
+        {
+          model: User,
+          as: 'author',
+          attributes: ['id', 'username', 'image']
+        },
+        {
+          model: Tag,
+          as: 'tags',
+          attributes: ['id', 'name'],
+          through: { attributes: [] }
+        },
+        {
+          model: Category,
+          as: 'category',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+    
+    const scoredArticles = recommendedArticles.map((article: any) => {
+      let score = 0;
+      
+      if (currentCategoryId && article.categoryId === currentCategoryId) {
+        score += 3;
+      }
+      
+      const articleTags = article.tags || [];
+      const articleTagIds = articleTags.map((tag: any) => tag.id);
+      const matchingTags = currentTagIds.filter((tagId: number) => 
+        articleTagIds.includes(tagId)
+      );
+      score += matchingTags.length;
+      
+      return {
+        article,
+        score,
+        viewCount: article.viewCount
+      };
+    });
+    
+    scoredArticles.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return b.viewCount - a.viewCount;
+    });
+    
+    const recommendations = scoredArticles
+      .slice(0, 5)
+      .map(item => {
+        const article = item.article.toJSON();
+        return {
+          id: article.id,
+          slug: article.slug,
+          title: article.title,
+          description: article.description,
+          viewCount: article.viewCount,
+          author: article.author,
+          category: article.category,
+          tags: article.tags,
+          createdAt: article.createdAt
+        };
+      });
+    
+    res.json({ 
+      recommendations,
+      count: recommendations.length
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
