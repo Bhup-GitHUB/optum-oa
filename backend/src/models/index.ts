@@ -2,6 +2,7 @@ import { User } from './user';
 import { Article } from './Article';
 import { Comment } from './comment';
 import { Tag } from './tag';
+import { Category } from './Category';
 
 User.hasMany(Article, { foreignKey: 'authorId', as: 'articles' });
 Article.belongsTo(User, { foreignKey: 'authorId', as: 'author' });
@@ -23,4 +24,7 @@ Tag.belongsToMany(Article, {
   foreignKey: 'tagId'
 });
 
-export { User, Article, Comment, Tag };
+Category.hasMany(Article, { foreignKey: 'categoryId', as: 'articles' });
+Article.belongsTo(Category, { foreignKey: 'categoryId', as: 'category' });
+
+export { User, Article, Comment, Tag, Category };

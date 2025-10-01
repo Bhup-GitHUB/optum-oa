@@ -1,12 +1,26 @@
 import { Router, Request, Response } from 'express';
-import { Article, User, Tag } from '../models';
+import { Article, User, Tag, Category } from '../models';
 import { auth } from '../middlewares/auth';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const { tag, category } = req.query;
+    
+    const whereClause: any = {};
+    
+    if (category) {
+      const categoryRecord = await Category.findOne({ 
+        where: { name: category } 
+      });
+      if (categoryRecord) {
+        whereClause.categoryId = categoryRecord.id;
+      }
+    }
+    
     const articles = await Article.findAll({
+      where: whereClause,
       include: [
         {
           model: User,
@@ -17,7 +31,13 @@ router.get('/', async (req: Request, res: Response) => {
           model: Tag,
           as: 'tags',
           attributes: ['name'],
-          through: { attributes: [] }
+          through: { attributes: [] },
+          ...(tag && { where: { name: tag } })
+        },
+        {
+          model: Category,
+          as: 'category',
+          attributes: ['id', 'name']
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -44,6 +64,11 @@ router.get('/:slug', async (req: Request, res: Response) => {
           as: 'tags',
           attributes: ['name'],
           through: { attributes: [] }
+        },
+        {
+          model: Category,
+          as: 'category',
+          attributes: ['id', 'name']
         }
       ]
     });
@@ -60,7 +85,7 @@ router.get('/:slug', async (req: Request, res: Response) => {
 
 router.post('/', auth, async (req: Request, res: Response) => {
   try {
-    const { title, description, body, tagList } = req.body;
+    const { title, description, body, tagList, categoryId } = req.body;
     
     const slug = title
       .toLowerCase()
@@ -72,6 +97,7 @@ router.post('/', auth, async (req: Request, res: Response) => {
       description,
       body,
       slug,
+      categoryId: categoryId || null,
       authorId: req.user!.id
     });
     
@@ -100,6 +126,11 @@ router.post('/', auth, async (req: Request, res: Response) => {
           as: 'tags',
           attributes: ['name'],
           through: { attributes: [] }
+        },
+        {
+          model: Category,
+          as: 'category',
+          attributes: ['id', 'name']
         }
       ]
     });
@@ -124,12 +155,13 @@ router.put('/:slug', auth, async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
     
-    const { title, description, body, tagList } = req.body;
+    const { title, description, body, tagList, categoryId } = req.body;
     
     await article.update({
       title: title || article.title,
       description: description || article.description,
-      body: body || article.body
+      body: body || article.body,
+      categoryId: categoryId !== undefined ? categoryId : article.categoryId
     });
     
     if (tagList && Array.isArray(tagList)) {
@@ -157,6 +189,11 @@ router.put('/:slug', auth, async (req: Request, res: Response) => {
           as: 'tags',
           attributes: ['name'],
           through: { attributes: [] }
+        },
+        {
+          model: Category,
+          as: 'category',
+          attributes: ['id', 'name']
         }
       ]
     });
